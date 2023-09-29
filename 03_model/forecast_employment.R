@@ -18,59 +18,59 @@ library(tidyquant)
 
 # DATA -----
 
-empl_Belknap      <- tidyquant::tq_get("LAUCN330010000000005", get = "economic.data", from = "1990-01-01")
-empl_Carroll      <- tidyquant::tq_get("LAUCN330030000000005", get = "economic.data", from = "1990-01-01")
-empl_Cheshire     <- tidyquant::tq_get("LAUCN330050000000005", get = "economic.data", from = "1990-01-01")
-empl_Coos         <- tidyquant::tq_get("LAUCN330070000000005", get = "economic.data", from = "1990-01-01")
-empl_Grafton      <- tidyquant::tq_get("LAUCN330090000000005", get = "economic.data", from = "1990-01-01")
-empl_Hillsborough <- tidyquant::tq_get("LAUCN330110000000005", get = "economic.data", from = "1990-01-01")
-empl_Merrimack    <- tidyquant::tq_get("LAUCN330130000000005", get = "economic.data", from = "1990-01-01")
-empl_Rockingham   <- tidyquant::tq_get("LAUCN330150000000005", get = "economic.data", from = "1990-01-01")
-empl_Strafford    <- tidyquant::tq_get("LAUCN330170000000005", get = "economic.data", from = "1990-01-01")
-empl_Sullivan     <- tidyquant::tq_get("LAUCN330190000000005", get = "economic.data", from = "1990-01-01")
+# empl_Belknap      <- tidyquant::tq_get("LAUCN330010000000005", get = "economic.data", from = "1990-01-01")
+# empl_Carroll      <- tidyquant::tq_get("LAUCN330030000000005", get = "economic.data", from = "1990-01-01")
+# empl_Cheshire     <- tidyquant::tq_get("LAUCN330050000000005", get = "economic.data", from = "1990-01-01")
+# empl_Coos         <- tidyquant::tq_get("LAUCN330070000000005", get = "economic.data", from = "1990-01-01")
+# empl_Grafton      <- tidyquant::tq_get("LAUCN330090000000005", get = "economic.data", from = "1990-01-01")
+# empl_Hillsborough <- tidyquant::tq_get("LAUCN330110000000005", get = "economic.data", from = "1990-01-01")
+# empl_Merrimack    <- tidyquant::tq_get("LAUCN330130000000005", get = "economic.data", from = "1990-01-01")
+# empl_Rockingham   <- tidyquant::tq_get("LAUCN330150000000005", get = "economic.data", from = "1990-01-01")
+# empl_Strafford    <- tidyquant::tq_get("LAUCN330170000000005", get = "economic.data", from = "1990-01-01")
+# empl_Sullivan     <- tidyquant::tq_get("LAUCN330190000000005", get = "economic.data", from = "1990-01-01")
+# 
+# empl_all <- list(Belknap = empl_Belknap, 
+#                   Carroll = empl_Carroll,
+#                   Cheshire = empl_Cheshire,
+#                   Coos = empl_Coos,
+#                   Grafton = empl_Grafton,
+#                   Hillsborough = empl_Hillsborough,
+#                   Merrimack = empl_Merrimack,
+#                   Rockingham = empl_Rockingham,
+#                   Strafford = empl_Strafford, 
+#                   Sullivan = empl_Sullivan) %>% 
+#     enframe() %>% 
+#     unnest(value) %>% 
+#     select(county = name, date, empl = price)
+# 
+# empl_all
+# 
+# write_rds(empl_all, "00_data/empl_all.rds")
 
-empl_all <- list(Belknap = empl_Belknap, 
-                  Carroll = empl_Carroll,
-                  Cheshire = empl_Cheshire,
-                  Coos = empl_Coos,
-                  Grafton = empl_Grafton,
-                  Hillsborough = empl_Hillsborough,
-                  Merrimack = empl_Merrimack,
-                  Rockingham = empl_Rockingham,
-                  Strafford = empl_Strafford, 
-                  Sullivan = empl_Sullivan) %>% 
-    enframe() %>% 
-    unnest(value) %>% 
-    select(county = name, date, empl = price)
+# Import data
+empl_all <- read_rds("00_data/empl_all.rds")
 
-empl_all
-
+# Transform data
 data_tbl <- empl_all %>%
-    select(county, date, empl)
 
-# * Time Plot ----
-data_tbl %>% 
-    group_by(county) %>% 
-    plot_time_series(
-        .date_var    = date,
-        .value       = empl,
-        .facet_ncol  = 2,
-        .smooth      = TRUE,
-        # .smooth_period = "2 months",
-        .interactive = TRUE
-    )
+    group_by(county) %>%
+    
+    # Difference to remove trend
+    mutate(empl_diff = diff_vec(empl)) %>%
+    
+    # Clean outlier of the start of the Pandemic
+    mutate(empl_diff_clean = ts_clean_vec(empl_diff, period = 12)) %>%
+    
+    ungroup() %>%
+    
+    select(county, date, empl = empl_diff_clean)
 
-# * Seasonality Plot ----
-counties <- unique(data_tbl$county)
+# 1 CREATE FULL DATASET ----
 
-data_tbl %>% 
-    filter(county == counties[1]) %>%
-    plot_seasonal_diagnostics(
-        .date_var    = date,
-        .value       = log(empl)
-    )
 
-# TRAIN / TEST SPLITS ---- 
+# 2 SEPARATE INTO MODELING AND FOREASTING DATA
+
+# 3 TRAIN / TEST SPLITS ---- 
 
 FORECAST_HORIZON <- 12
 
@@ -80,7 +80,7 @@ splits %>%
     tk_time_series_cv_plan() %>%
     plot_time_series_cv_plan(date, empl)
 
-# PREPROCESSING ----
+# 4 PREPROCESSING ----
 
 recipe_spec <- recipe(empl ~ ., data = training(splits)) %>%
     step_timeseries_signature(date) %>%
@@ -88,7 +88,7 @@ recipe_spec <- recipe(empl ~ ., data = training(splits)) %>%
 
 recipe_spec %>% prep() %>% juice() %>% glimpse()
 
-# MODELING ----
+# 5 MODELING ----
 
 # Initialize H2O
 h2o.init(
@@ -135,18 +135,18 @@ wflw_fit_h2o %>% automl_leaderboard()
 # Saving / Loading Models ----
 
 wflw_fit_h2o %>%
-    automl_update_model('StackedEnsemble_AllModels_1_AutoML_1_20230916_82507') %>%
-    save_h2o_model(path = 'h2o_models/StackedEnsemble_AllModels_1_AutoML_1_20230916_82507')
+    automl_update_model('GBM_grid_1_AutoML_2_20230926_64448_model_7') %>%
+    save_h2o_model(path = 'h2o_models/GBM_grid_1_AutoML_2_20230926_64448_model_7')
 
-load_h2o_model("h2o_models/StackedEnsemble_AllModels_1_AutoML_1_20230916_82507/")
+load_h2o_model("h2o_models/GBM_grid_1_AutoML_2_20230926_64448_model_7/")
 
-# FORECASTING ----
+# 6 FORECASTING ----
 
 # * Modeltime Table ----
 modeltime_tbl <- modeltime_table(
     wflw_fit_h2o,
     wflw_fit_h2o %>%
-        automl_update_model('StackedEnsemble_AllModels_1_AutoML_1_20230916_82507')
+        automl_update_model('GBM_grid_1_AutoML_2_20230926_64448_model_7')
 ) 
 
 modeltime_tbl
