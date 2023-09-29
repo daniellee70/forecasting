@@ -1,0 +1,76 @@
+---
+title: "Forecast NH County Employment"
+format: 
+    html:
+        toc: true
+editor: visual
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+# Set up
+library(tidyverse)
+library(tidyquant)
+library(patchwork)
+
+empl_dec_box_fig         <- read_rds("../00_fig/empl_dec_box_fig.rds")
+empl_seasonal_north_fig  <- read_rds("../00_fig/empl_seasonal_north_fig.rds")
+empl_seasonal_south_fig  <- read_rds("../00_fig/empl_seasonal_south_fig.rds")
+empl_seasonal_region_fig <- read_rds("../00_fig/empl_seasonal_region_fig.rds")
+corr_with_ma_north_fig   <- read_rds("../00_fig/corr_with_ma_north_fig.rds")
+corr_with_ma_south_fig   <- read_rds("../00_fig/corr_with_ma_south_fig.rds")
+```
+
+## Overall Trend
+
+* Two States in New Hampshire
+* Growing southern counties versus Declining northern counties
+* Cheshire in the state's southwestern region resembles northern counties.
+
+```{r fig.height=8}
+empl_dec_box_fig + plot_annotation(
+    caption = 'Data: U.S. Bureau of Labor Statistics, Employed Persons'
+) 
+```
+
+# Seasonality
+
+* The seasonal fluctuations in employment in northern counties contrast the stable year-round employment in the southern counties.
+* Employment spikes up during the summer months of June, July, and August. This seasonal pattern is particularly noticeable in Belknap and Carroll counties.
+* Belknap County also displays many outliers on the lower end. The economy in the Lakes Region outside the peak summer months can struggle far from the norm.
+* Interestingly, Merrimack County also displays downside outliers. Unlike Belknap County, however, the outliers are not confined to the non-summer months.
+
+```{r fig.height=7.5}
+empl_seasonal_region_fig + 
+    
+    plot_annotation(caption = 'Data: U.S. Bureau of Labor Statistics, Employed Persons') 
+```
+
+```{r}
+patchwork <- empl_seasonal_north_fig / empl_seasonal_south_fig
+
+patchwork + 
+    
+    plot_annotation(caption = 'Data: U.S. Bureau of Labor Statistics, Employed Persons') 
+```
+
+# Influence of Massachusetts Economy
+
+* New Hampshire's economy is closely connected with that of Massachusetts. A strong economy in the neighboring state spills over to New Hampshire.
+* In particular, the correlation is strong in southernmost counties: Hillsborough, Rockingham, and Strafford. However, Cheshire County does not display correlation as strong.
+* Northern counties are not as closely connected to Massachusetts. In particular, Coos County stands out with a strong negative association.
+
+```{r}
+patchwork <- corr_with_ma_north_fig / corr_with_ma_south_fig
+
+patchwork + 
+    
+    plot_annotation(
+        title = 'Variations in Cross Correlations in Monthly Employment',
+        subtitle = 'between New Hampshire Counties and Massachusetts',
+        caption = 'Data: U.S. Bureau of Labor Statistics, Employed Persons'
+        )
+```
