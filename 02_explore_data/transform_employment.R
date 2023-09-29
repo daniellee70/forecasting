@@ -23,40 +23,7 @@ library(timetk)
 library(lubridate)
 
 # DATA ----
-
-# empl_Belknap      <- tidyquant::tq_get("LAUCN330010000000005", get = "economic.data", from = "1990-01-01")
-# empl_Carroll      <- tidyquant::tq_get("LAUCN330030000000005", get = "economic.data", from = "1990-01-01")
-# empl_Cheshire     <- tidyquant::tq_get("LAUCN330050000000005", get = "economic.data", from = "1990-01-01")
-# empl_Coos         <- tidyquant::tq_get("LAUCN330070000000005", get = "economic.data", from = "1990-01-01")
-# empl_Grafton      <- tidyquant::tq_get("LAUCN330090000000005", get = "economic.data", from = "1990-01-01")
-# empl_Hillsborough <- tidyquant::tq_get("LAUCN330110000000005", get = "economic.data", from = "1990-01-01")
-# empl_Merrimack    <- tidyquant::tq_get("LAUCN330130000000005", get = "economic.data", from = "1990-01-01")
-# empl_Rockingham   <- tidyquant::tq_get("LAUCN330150000000005", get = "economic.data", from = "1990-01-01")
-# empl_Strafford    <- tidyquant::tq_get("LAUCN330170000000005", get = "economic.data", from = "1990-01-01")
-# empl_Sullivan     <- tidyquant::tq_get("LAUCN330190000000005", get = "economic.data", from = "1990-01-01")
-# 
-# empl_all <- list(Belknap = empl_Belknap, 
-#                   Carroll = empl_Carroll,
-#                   Cheshire = empl_Cheshire,
-#                   Coos = empl_Coos,
-#                   Grafton = empl_Grafton,
-#                   Hillsborough = empl_Hillsborough,
-#                   Merrimack = empl_Merrimack,
-#                   Rockingham = empl_Rockingham,
-#                   Strafford = empl_Strafford, 
-#                   Sullivan = empl_Sullivan) %>% 
-#     enframe() %>% 
-#     unnest(value) %>% 
-#     select(county = name, date, empl = price)
-# 
-# empl_all
-# 
-# write_rds(empl_all, "00_data/empl_all.rds")
-
-empl_all <- read_rds("00_data/empl_all.rds")
-
-data_tbl <- empl_all %>%
-    select(county, date, empl)
+data_tbl <- read_rds("00_data/data_tbl.rds")
 
 data_Belknap_tbl <- data_tbl %>%
     filter(county == "Belknap") %>%
@@ -79,24 +46,19 @@ data_Belknap_tbl %>%
         .show_summary = TRUE
     )
 
-# Log - Show Error 
+# Log 
 data_Belknap_tbl %>%
     plot_time_series(date, log(empl))
 
-# Log Plus 1
-data_Belknap_tbl %>%
-    plot_time_series(date, log1p(empl))
-
 # Inversion
 data_Belknap_tbl %>%
-    plot_time_series(date, log1p(empl) %>% expm1())
+    plot_time_series(date, log(empl) %>% exp())
 
 # Benefit
-data_tbl %>%
+data_Belknap_tbl %>%
     plot_time_series_regression(
         .date_var = date,
-        .formula = log1p(empl) ~ as.numeric(date) +
-            wday(date, label = TRUE) +
+        .formula = log(empl) ~ as.numeric(date) +
             month(date, label = TRUE),
         .show_summary = TRUE
     )
@@ -109,7 +71,7 @@ data_tbl %>%
 
 # Inversion
 data_tbl %>%
-    plot_time_series(date, expm1(log1p(empl)), .facet_vars = county)
+    plot_time_series(date, exp(log(empl)), .facet_vars = county)
 
 # 2.0 ROLLING & SMOOTHING ----
 # - Common time series operations to visualize trend
@@ -117,6 +79,74 @@ data_tbl %>%
 # - Can help with outlier-effect reduction & trend detection
 # - Note: Businesses often use a rolling average as a forecasting technique 
 #   - A rolling average forecast is usually sub-optimal (good opportunity for you!)
+
+# * Sliding / Rolling Functions ----
+data_Belknap_tbl %>%
+    
+    mutate(empl_roll = slidify_vec(empl, 
+                                    .f = mean, 
+                                    .period = 12, 
+                                    .align = "center", 
+                                    .partial = TRUE)) %>%
+    
+    pivot_longer(-date) %>%
+    plot_time_series(date, value, .color_var = name, .smooth = FALSE)
+
+
+# * LOESS smoother ----
+
+data_Belknap_tbl %>%
+    
+    mutate(empl_smooth = smooth_vec(empl, 
+                                     period = 12,
+                                     # span = 0.75
+                                     degree = 0)) %>%
+    
+    pivot_longer(-date) %>%
+    plot_time_series(date, value, .color_var = name, .smooth = FALSE)
+
+# * Rolling Correlations ----
+# - Identify changing relationships
+
+cor(1:10, seq(0, 20, length.out = 10))
+
+rolling_cor_12 <- slidify(
+    .f = ~ cor(.x, .y, use = "pairwise.complete.obs"),
+    .period  = 12,
+    .align   = "center",
+    .partial = FALSE
+)
+
+data_Belknap_tbl %>%
+    
+    # Add MA empl
+    left_join(external_var_tbl %>%
+                  select(date, empl_MA)) %>%
+    
+    # Get rolling Corr
+    mutate(rolling_cor_empl = rolling_cor_12(empl, empl_MA)) %>%
+    # mutate(dateHour = ymd_h(dateHour)) %>%
+    # select(-sessions) %>%
+    pivot_longer(-date) %>%
+    group_by(name) %>%
+    plot_time_series(date, value)
+
+
+# * Problem with Moving Avg Forecasting ----
+
+data_Belknap_tbl %>%
+    mutate(
+        mavg_12 = slidify_vec(empl, .f = ~ mean(.x, na.rm = TRUE), .period = 12, .align = "right")
+    ) %>%
+    bind_rows(
+        future_frame(., .length_out = 12)
+    ) %>%
+    fill(mavg_12, .direction = "down") %>%
+    pivot_longer(-date) %>%
+    plot_time_series(date, value, name, .smooth = F)
+
+
+
 
 # 3.0 RANGE REDUCTION ----
 # - Used in visualization to overlay series

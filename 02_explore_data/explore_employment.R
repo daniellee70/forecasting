@@ -17,13 +17,7 @@ library(patchwork)
 
 # DATA -----
 data_tbl <- read_rds("00_data/data_tbl.rds")
-
-data_tbl <- empl_all %>%
-    select(county, date, empl) %>% 
-    mutate(region = if_else(county %in% c("Belknap", "Carroll", "Coos", "Grafton", "Sullivan"), "Northern", "Southern")) %>%
-    mutate(county = factor(county, 
-                           levels = c("Belknap", "Carroll", "Coos", "Grafton", "Sullivan",
-                                      "Cheshire", "Hillsborough", "Merrimack", "Rockingham", "Strafford")))
+external_var_tbl <- read_rds("00_data/external_var_tbl.rds")
 
 # One County ----
 
